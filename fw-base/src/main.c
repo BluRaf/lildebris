@@ -9,9 +9,16 @@
 
 FILE usart_io = FDEV_SETUP_STREAM(usart_unbuff_putchar, usart_unbuff_getchar, _FDEV_SETUP_RW);
 
-enum blink_modes {BRIGHT, BLINK, FLUID} blink_mode;
-volatile uint8_t pot_val;
-volatile uint8_t blink_buf;
+enum blink_modes {BRIGHT, BLINK, FLUID} blink_mode = 0;
+volatile uint8_t pot_val = 0; /* raw POT value */
+volatile uint8_t scaled_time = 0; /* scaled POT value (1 = 10ms) */
+volatile uint8_t blink_buf = 0; /* blink state */
+volatile uint8_t cmp_cnt = 0; /* CTC hit counter */
+
+
+uint8_t map(uint8_t x, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max) {
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
 
 void button()
@@ -32,10 +39,7 @@ void set_led()
     cli();
 
     /* disable PWM and clear interrupt */
-    TIMSK1 &= ~(1 << ICIE1);
-    TCCR1B &= 0xf8; /* clear CSxx */
-
-    TCCR2B &= 0xf8; /* clear CSxx */
+    TCCR2B &= 0xf8; /* clear prescaler */
     TCCR2A = 0; /* mode 0 */
     TCNT2 = 0; /* clear counter */
 
@@ -46,15 +50,13 @@ void set_led()
         OCR2B = pot_val;
         TCCR2A |= (1 << COM2B1); /* non-inverting mode */
         TCCR2A |= (1 << WGM21) | (1 << WGM20); /* fast PWM */
-        TCCR2B |= (1 << CS21); /* set prescaler to 8 and starts PWM */
+        TCCR2B |= (1 << CS21); /* set prescaler to 8 and start PWM */
         break;
     case BLINK:
         /* 0.1s - 2s, half-time on, half-time off */
-        ICR1 = 0x30D3; /* TODO */
-        TCCR1B |= (1 << WGM12); /* CTC mode */
-        TIMSK1 |= (1 << ICIE1); /* enable compare interrupt */
-        TCCR1B |= (1 << CS12); /* prescaler: 256 */
-
+        TCNT0 = 246; /* every 10ms */
+        TCCR2A |= (1 << WGM01); /* Clear on compare */
+        TCCR2B |= (1 << CS22) | (1 << CS21) | (1 << CS20); /* set prescaler to 1024 */
         break;
     case FLUID:
         /* TODO */
@@ -139,14 +141,19 @@ int main(void)
 /* ADC interrupt - used for setting new Timer2/PWM value */
 ISR(ADC_vect)
 {
-    pot_val = ADCH; /* potentiometer value */
-    /* any processing here? */
-    OCR2B = pot_val;
+    pot_val = ADCH;
+    scaled_time = map(pot_val, 0, 255, 10, 200);
 }
 
-/* Timer1 interrupt - used for blink mode BLINK */
-ISR (TIMER1_COMPA_vect) {
-    blink_buf = !blink_buf;
-    if (blink_buf) DDRD |= _BV(3);
-    else DDRD &= ~(_BV(3));
+/* Timer2 overflow */
+ISR (TIMER2_COMPA_vect)
+{
+    cmp_cnt++;
+
+    if ((blink_mode == BLINK) && (cmp_cnt >= (scaled_time>>1))) {
+        blink_buf = !blink_buf;
+        if (blink_buf) DDRD |= _BV(3);
+        else DDRD &= ~(_BV(3));
+        cmp_cnt = 0;
+    }
 }

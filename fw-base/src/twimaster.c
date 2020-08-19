@@ -1,6 +1,6 @@
 #include <stdint.h>
 #include <avr/interrupt.h>
-#include "i2cmaster.h"
+#include "twimaster.h"
 
 static unsigned char twi_buffer[TWI_BUFFER_SIZE];
 static uint8_t twi_packet_size;
