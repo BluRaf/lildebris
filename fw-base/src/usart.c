@@ -103,14 +103,14 @@ int usart_putchar(char c, FILE *stream)
 // 	}
 // }
 
-ISR(USART_UDRE_vect, ISR_BLOCK) {
-	/* send next byte if anything left in ring buffer */
-	if (usart_tx_buf.head != usart_tx_buf.tail) {
-		UDR0 = usart_tx_buf.ring[usart_tx_buf.tail];
-		usart_tx_buf.tail = (usart_tx_buf.tail + 1) % SERIAL_TX_RING_SIZE;
-	}
-	else {
-		/* mask interrupt, everything was sent */
-		UCSR0B &= ~_BV(UDRIE0);
-	}
-}
+// ISR(USART_UDRE_vect, ISR_BLOCK) {
+// 	/* send next byte if anything left in ring buffer */
+// 	if (usart_tx_buf.head != usart_tx_buf.tail) {
+// 		UDR0 = usart_tx_buf.ring[usart_tx_buf.tail];
+// 		usart_tx_buf.tail = (usart_tx_buf.tail + 1) % SERIAL_TX_RING_SIZE;
+// 	}
+// 	else {
+// 		/* mask interrupt, everything was sent */
+// 		UCSR0B &= ~_BV(UDRIE0);
+// 	}
+// }
