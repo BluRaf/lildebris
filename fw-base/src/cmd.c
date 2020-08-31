@@ -1,7 +1,6 @@
 #include <avr/io.h>
 #include <string.h>
 
-#include "motor.h"
 #include "usart.h"
 #include "cmd.h"
 
@@ -12,7 +11,7 @@ char cmd_arg_buf;
 void read_cmd()
 {
     /* UART reading */
-    if (getchar() == 0x5a)
+    if (getchar() == 'Z')
     {
         /* COMMAND START */
         puts("LOADING");
@@ -48,23 +47,18 @@ void call_cmd(uint8_t arg_cnt, char *args)
         switch (args[0])
         {
             case 'N':
-                motor_rel(  0,  DY);
                 puts("y+");
                 break;
             case 'S':
-                motor_rel(  0, -DY);
                 puts("y-");
                 break;
             case 'W':
-                motor_rel(-DX,   0);
                 puts("x-");
                 break;
             case 'E':
-                motor_rel( DX,   0);
                 puts("x+");
                 break;
             case '.':
-                motor_abs(  0,   0);
                 puts("STOP");
                 break;
             default:

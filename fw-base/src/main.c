@@ -3,17 +3,19 @@
 #include <util/delay.h>
 #include <string.h>
 
-#include "motor.h"
 #include "usart.h"
 #include "cmd.h"
+#include "LCD_HD44780_IIC.h"
 
-FILE usart_io = FDEV_SETUP_STREAM(usart_unbuff_putchar, usart_unbuff_getchar, _FDEV_SETUP_RW);
+FILE usart_io = FDEV_SETUP_STREAM(usart_putchar, usart_getchar, _FDEV_SETUP_RW);
 
 enum blink_modes {BRIGHT, BLINK, FLUID} blink_mode = BRIGHT;
 volatile uint8_t pot_val = 0; /* raw POT value */
 volatile uint8_t scaled_time = 0; /* scaled POT value (2 = 10ms) */
 volatile uint8_t cmp_cnt = 0; /* CTC hit counter */
 volatile  int8_t inc_dir = 1;
+char numstr[4];
+char numstr2[6];
 
 
 uint8_t map(uint8_t x, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max) {
@@ -72,6 +74,26 @@ void set_led()
         break;
     }
 
+    switch (blink_mode) {
+    case FLUID:
+        puts("FLUID");
+    	LCDGotoXY(10,1);
+	    LCDstring(" FLUID", 6);
+        break;
+    case BRIGHT:
+        puts("BRIGHT");
+        LCDGotoXY(10,1);
+        LCDstring("BRIGHT", 6);
+        break;
+    case BLINK:
+        puts("BLINK");
+        LCDGotoXY(10,1);
+	    LCDstring(" BLINK", 6);
+        break;
+    default:
+        break;
+    }
+
     DDRD |= (1<<PD3);
 
     sei();
@@ -111,15 +133,32 @@ void setup(void)
     ADCSRA |= (1 << ADSC);    /* Start the ADC conversion */
 
     /* Initialize USART */
-    //usart_init();
-    //stdin = stdout = &usart_io;
+    usart_init();
+    stdin = stdout = &usart_io;
 
     /* Unlock interrupts */
     sei();
 
+	LCDinit();
+	LCDhome();
+
     set_led();
 
-    //puts("215514 READY.");
+	// LCDstring(data, 13);
+	
+	// LCDGotoXY(0,1);
+	// LCDstring("Ala ma kota", 11);
+	// LCDGotoXY(0,1);
+	// LCDstring("xD", 2);
+	// LCDcursorRight(11);
+	// _delay_ms(2000);
+	// LCDstring("xD", 2);
+	// _delay_ms(2000);
+	// LCDshiftRight(4);
+	// _delay_ms(2000);
+	// LCDshiftLeft(4);
+
+    puts("215514 READY.");
 }
 
 void loop(void)
@@ -133,7 +172,27 @@ void loop(void)
         while (bit_is_clear(PINC, 0)) {}
         PORTB &= ~(1<<PB5);
     }
-    /* read_cmd(); */
+
+    LCDGotoXY(0,0);
+    snprintf(numstr, 4, "%3d", pot_val);
+	LCDstring("POT:", 4);
+    LCDstring(numstr, 3);
+
+    LCDGotoXY(0,1);
+    LCDstring("Okr.:", 5);
+    snprintf(numstr2, 6, "%4d", scaled_time<<3);
+    LCDstring(numstr2, 4);
+
+    LCDGotoXY(9,0);
+    snprintf(numstr, 4, "%3d", OCR2B);
+	LCDstring("PWM:", 4);
+    LCDstring(numstr, 3);
+
+    //read_cmd();
+    LCDGotoXY(8,0);
+    snprintf(numstr, 4, "%c", getchar());
+    LCDstring(numstr, 1);
+
 }
 
 int main(void)

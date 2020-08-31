@@ -14,7 +14,7 @@ static volatile buffer_t usart_rx_buf, usart_tx_buf;
 void usart_init()
 {
     /* baud rate value - higher and lower byte */ 
-    UBRR0H = UBRRH_VALUE;                   
+    UBRR0H = UBRRH_VALUE;
     UBRR0L = UBRRL_VALUE;
 
 #if USE_2X
@@ -23,10 +23,10 @@ void usart_init()
     UCSR0A &= ~(_BV(U2X0));
 #endif
 
-    /* enable RX and TX */
-    UCSR0B = _BV(RXEN0) | _BV(TXEN0);
     /* async serial: 8N1 */
     UCSR0C = _BV(UCSZ01) | _BV(UCSZ00);
+    /* enable RX and TX */
+    UCSR0B = _BV(RXEN0) | _BV(TXEN0);
 }
 
 
@@ -49,19 +49,19 @@ int usart_unbuff_putchar(char c, FILE *stream)
 
 // /* Buffered IO */
 
-// int usart_getchar(FILE *stream)
-// {
-//     char c;
-//     /* check if ring buffer is empty */
-//     if (usart_rx_buf.head == usart_rx_buf.tail)
-//         return EOF;
+int usart_getchar(FILE *stream)
+{
+    char c;
+    /* check if ring buffer is empty */
+    if (usart_rx_buf.head == usart_rx_buf.tail)
+        return EOF;
     
-//     /* read byte from ring buffer */
-//     c = usart_rx_buf.ring[usart_rx_buf.tail];
-//     usart_rx_buf.tail = (usart_rx_buf.tail + 1) % SERIAL_RX_RING_SIZE;
+    /* read byte from ring buffer */
+    c = usart_rx_buf.ring[usart_rx_buf.tail];
+    usart_rx_buf.tail = (usart_rx_buf.tail + 1) % SERIAL_RX_RING_SIZE;
 
-//     return c;
-// }
+    return c;
+}
 
 int usart_putchar(char c, FILE *stream)
 {
@@ -84,33 +84,33 @@ int usart_putchar(char c, FILE *stream)
 
 // /* Interrupt handlers for buffered IO */
 
-// ISR(USART_RX_vect, ISR_BLOCK)
-// {
-//     if (bit_is_clear(UCSR0A, FE0)) {
-//         /* read byte and calculate new head position */
-//         volatile unsigned char data = UDR0;
-//         UDR0 = data;
-//         volatile unsigned char next = ((usart_rx_buf.head + 1) % SERIAL_RX_RING_SIZE);
-//         if (next != usart_rx_buf.tail) {
-//             /* write to ring buffer */
-// 			usart_rx_buf.ring[usart_rx_buf.head] = data;
-// 			usart_rx_buf.head = next;			
-// 		}
-//     }
-//     else {
-// 		/* read anyway to clear interrupt flag */
-// 		volatile unsigned char data __attribute__((unused)) = UDR0;
-// 	}
-// }
+ISR(USART_RX_vect, ISR_BLOCK)
+{
+    if (bit_is_clear(UCSR0A, FE0)) {
+        /* read byte and calculate new head position */
+        volatile unsigned char data = UDR0;
+        UDR0 = data;
+        volatile unsigned char next = ((usart_rx_buf.head + 1) % SERIAL_RX_RING_SIZE);
+        if (next != usart_rx_buf.tail) {
+            /* write to ring buffer */
+            usart_rx_buf.ring[usart_rx_buf.head] = data;
+            usart_rx_buf.head = next;			
+        }
+    }
+    else {
+        /* read anyway to clear interrupt flag */
+        volatile unsigned char data __attribute__((unused)) = UDR0;
+	}
+}
 
-// ISR(USART_UDRE_vect, ISR_BLOCK) {
-// 	/* send next byte if anything left in ring buffer */
-// 	if (usart_tx_buf.head != usart_tx_buf.tail) {
-// 		UDR0 = usart_tx_buf.ring[usart_tx_buf.tail];
-// 		usart_tx_buf.tail = (usart_tx_buf.tail + 1) % SERIAL_TX_RING_SIZE;
-// 	}
-// 	else {
-// 		/* mask interrupt, everything was sent */
-// 		UCSR0B &= ~_BV(UDRIE0);
-// 	}
-// }
+ISR(USART_UDRE_vect, ISR_BLOCK) {
+    /* send next byte if anything left in ring buffer */
+    if (usart_tx_buf.head != usart_tx_buf.tail) {
+        UDR0 = usart_tx_buf.ring[usart_tx_buf.tail];
+        usart_tx_buf.tail = (usart_tx_buf.tail + 1) % SERIAL_TX_RING_SIZE;
+    }
+    else {
+        /* mask interrupt, everything was sent */
+        UCSR0B &= ~_BV(UDRIE0);
+    }
+}
