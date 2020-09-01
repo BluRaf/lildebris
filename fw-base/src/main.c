@@ -1,102 +1,23 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <util/delay.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "usart.h"
 #include "cmd.h"
+#include "led.h"
 #include "LCD_HD44780_IIC.h"
 
 FILE usart_io = FDEV_SETUP_STREAM(usart_putchar, usart_getchar, _FDEV_SETUP_RW);
 
-enum blink_modes {BRIGHT, BLINK, FLUID} blink_mode = BRIGHT;
-volatile uint8_t pot_val = 0; /* raw POT value */
-volatile uint8_t scaled_time = 0; /* scaled POT value (2 = 10ms) */
-volatile uint8_t cmp_cnt = 0; /* CTC hit counter */
-volatile  int8_t inc_dir = 1;
 char numstr[4];
 char numstr2[6];
+char letter;
 
 
 uint8_t map(uint8_t x, uint8_t in_min, uint8_t in_max, uint8_t out_min, uint8_t out_max) {
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-
-void button()
-{
-    if (blink_mode >= FLUID)
-    {
-        blink_mode = BRIGHT;
-    }
-    else
-    {
-        blink_mode++;
-    }
-}
-
-
-void set_led()
-{
-    cli();
-
-    /* disable Timer0 */
-    TCCR0B = 0; /* clear prescaler */
-    TCCR0A = 0; /* mode 0 */
-    TCNT0 = 0; /* clear counter */
-    TIMSK0 = 0;
-    /* disable Timer2 */
-    TCCR2B = 0; /* clear prescaler */
-    TCCR2A = 0; /* mode 0 */
-    TCNT2 = 0; /* clear counter */
-    TIMSK2 = 0;
-
-    /* Set timers */
-    switch (blink_mode) {
-    case FLUID:
-        TCCR0A = (1 << WGM21); /* Clear on compare */
-        TCCR0B = (1 << CS02); /* set prescaler to 1024 */
-        TIMSK0 = (1 << OCIE0A);
-        OCR0A = scaled_time;
-    case BRIGHT:
-        TCCR2A = (1 << COM2B1) | (1 << WGM21) | (1 << WGM20); /* fast PWM, non-inverting mode */
-        TCCR2B = (1 << CS22); /* clk/8 and start PWM */
-        OCR2B = pot_val;
-        break;
-    case BLINK:
-        /* 0.1s - 2s, half-time on, half-time off */
-        TCCR2A = (1 << WGM21); /* Clear on compare */
-        TCCR2B = (1 << CS22) | (1 << CS21) | (1 << CS20); /* set prescaler to 1024 */
-        TIMSK2 = (1 << OCIE2A);
-        OCR2A = 246; /* 20Hz - every 50ms */
-        break;
-    default:
-        break;
-    }
-
-    switch (blink_mode) {
-    case FLUID:
-        puts("FLUID");
-    	LCDGotoXY(10,1);
-	    LCDstring(" FLUID", 6);
-        break;
-    case BRIGHT:
-        puts("BRIGHT");
-        LCDGotoXY(10,1);
-        LCDstring("BRIGHT", 6);
-        break;
-    case BLINK:
-        puts("BLINK");
-        LCDGotoXY(10,1);
-	    LCDstring(" BLINK", 6);
-        break;
-    default:
-        break;
-    }
-
-    DDRD |= (1<<PD3);
-
-    sei();
 }
 
 
@@ -144,20 +65,6 @@ void setup(void)
 
     set_led();
 
-	// LCDstring(data, 13);
-	
-	// LCDGotoXY(0,1);
-	// LCDstring("Ala ma kota", 11);
-	// LCDGotoXY(0,1);
-	// LCDstring("xD", 2);
-	// LCDcursorRight(11);
-	// _delay_ms(2000);
-	// LCDstring("xD", 2);
-	// _delay_ms(2000);
-	// LCDshiftRight(4);
-	// _delay_ms(2000);
-	// LCDshiftLeft(4);
-
     puts("215514 READY.");
 }
 
@@ -167,32 +74,50 @@ void loop(void)
     if (bit_is_clear(PINC, 0))
     {
         PORTB |= (1<<PB5);
-        button();
+        ADCSRA |= (1 << ADIE);    /* Enable Interrupts */
+        if (blink_mode >= FLUID) blink_mode = BRIGHT;
+        else blink_mode++;
         set_led();
         while (bit_is_clear(PINC, 0)) {}
         PORTB &= ~(1<<PB5);
     }
 
     LCDGotoXY(0,0);
-    snprintf(numstr, 4, "%3d", pot_val);
-	LCDstring("POT:", 4);
-    LCDstring(numstr, 3);
+    switch (source_mode)
+    {
+    case POT:
+        snprintf(numstr, 4, "%3d", pot_val);
+        LCDstring("Pot:", 4);
+        LCDstring(numstr, 3);
+        break;
+    case SER:
+        LCDstring("Serial ", 7);
+        break;
+    default:
+        break;
+    }
 
     LCDGotoXY(0,1);
-    LCDstring("Okr.:", 5);
-    snprintf(numstr2, 6, "%4d", scaled_time<<3);
-    LCDstring(numstr2, 4);
+    if (blink_mode != BRIGHT) {
+        LCDstring("Okr.:", 5);
+        snprintf(numstr2, 6, "%4d", scaled_time<<3);
+        LCDstring(numstr2, 4);
+    }
+    else {
+        LCDstring("         ", 9);
+    }
 
     LCDGotoXY(9,0);
-    snprintf(numstr, 4, "%3d", OCR2B);
-	LCDstring("PWM:", 4);
-    LCDstring(numstr, 3);
+    if (blink_mode != BLINK) {
+        snprintf(numstr, 4, "%3d", OCR2B);
+	    LCDstring("PWM:", 4);
+        LCDstring(numstr, 3);
+    }
+    else {
+        LCDstring("         ", 7);
+    }
 
-    //read_cmd();
-    LCDGotoXY(8,0);
-    snprintf(numstr, 4, "%c", getchar());
-    LCDstring(numstr, 1);
-
+    read_cmd();
 }
 
 int main(void)
@@ -209,27 +134,8 @@ int main(void)
 /* ADC interrupt - used for setting new Timer2/PWM value */
 ISR(ADC_vect)
 {
+    source_mode = POT;
     pot_val = ADCH;
     scaled_time = map(pot_val, 0, 255, 12, 245);
-    if (blink_mode == BRIGHT) OCR2B = 255-pot_val;
-    else if (blink_mode == FLUID) OCR0A = scaled_time;
-}
-
-/* Timer0 CTC interrupt */
-ISR(TIMER0_COMPA_vect)
-{
-    if (OCR2B == 0) inc_dir = 1;
-    else if (OCR2B == 255) inc_dir = -1;
-    OCR2B += inc_dir;
-}
-
-/* Timer2 CTC interrupt */
-ISR(TIMER2_COMPA_vect)
-{
-    cmp_cnt++;
-
-    if ((blink_mode == BLINK) && (cmp_cnt >= (scaled_time>>2))) {
-        PORTD ^= (1<<PD3);
-        cmp_cnt = 0;
-    }
+    calculate_timers(pot_val, scaled_time);
 }

@@ -27,6 +27,8 @@ void usart_init()
     UCSR0C = _BV(UCSZ01) | _BV(UCSZ00);
     /* enable RX and TX */
     UCSR0B = _BV(RXEN0) | _BV(TXEN0);
+    /* enable RX interrupt */
+    UCSR0B |= (1 << RXCIE0);
 }
 
 
@@ -96,6 +98,7 @@ ISR(USART_RX_vect, ISR_BLOCK)
             usart_rx_buf.ring[usart_rx_buf.head] = data;
             usart_rx_buf.head = next;			
         }
+
     }
     else {
         /* read anyway to clear interrupt flag */
